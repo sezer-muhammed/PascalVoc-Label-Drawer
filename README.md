@@ -18,7 +18,7 @@ python label_images.py --images_folder path/to/images --annotations_folder path/
 
 # Future Work
 
-- Adding support for other annotation formats such as COCO and VOC
+- Adding support for other annotation formats such as COCO and YOLO
 - Implementing more advanced image processing techniques to improve the visualization of labels
 - Incorporating more options for label styling (e.g. label background, border, etc.)
 - Incorporating support for video data
