@@ -4,6 +4,7 @@ from PIL import Image, ImageDraw, ImageFont
 import argparse
 import time
 import hashlib
+import concurrent.futures
 
 def hash_label_to_color(label_name):
     """ Hash the label name to a unique color """
@@ -29,60 +30,61 @@ font_size = args.font_size
 if not os.path.exists(output_folder):
     os.makedirs(output_folder)
 
-color_dict = {'tasit': (255, 110, 0, 40), 'insan': (0, 255, 110, 40), 'object3': (0, 0, 255, 40)}
-
 start_time = time.time()
 count = 0
 
 # Pre-allocate the image and draw objects
 font = ImageFont.truetype("arial.ttf", font_size)
 
-for image_file in os.listdir(images_folder):
-    print(f"Processing image: {image_file}", end="\r")
-    if image_file.endswith('.jpg') or image_file.endswith('.png'):
-        annotation_file = os.path.splitext(image_file)[0] + '.xml'
-        annotation_path = os.path.join(annotations_folder, annotation_file)
-        if os.path.exists(annotation_path):
-            # Open image
-            im = Image.open(os.path.join(images_folder, image_file))
-            im = im.convert("RGBA")
+def process_image(image_file):
+    """ Process a single image """
+    global count
+    global start_time
 
-            # Clear the previous image from the polygon layer
-            polygon_layer = Image.new('RGBA', im.size, (0, 0, 0, 0))
-            polygon_draw = ImageDraw.Draw(polygon_layer)
+    annotation_file = os.path.splitext(image_file)[0] + '.xml'
+    annotation_path = os.path.join(annotations_folder, annotation_file)
+    if os.path.exists(annotation_path):
+        # Open image
+        im = Image.open(os.path.join(images_folder, image_file))
+        im = im.convert("RGBA")
 
-            # Open annotation
-            tree = ET.parse(annotation_path)
-            root = tree.getroot()
+        # Clear the previous image from the polygon layer
+        polygon_layer = Image.new('RGBA', im.size, (0, 0, 0, 0))
+        polygon_draw = ImageDraw.Draw(polygon_layer)
 
-            for obj in root.iter('object'):
-                name = obj.find('name').text
-                xmin = int(obj.find('bndbox/xmin').text)
-                ymin = int(obj.find('bndbox/ymin').text)
-                xmax = int(obj.find('bndbox/xmax').text)
-                ymax = int(obj.find('bndbox/ymax').text)
+        # Open annotation
+        tree = ET.parse(annotation_path)
+        root = tree.getroot()
 
-                if overlay:
-                    color = hash_label_to_color(name)
-                    points = [(xmin, ymin), (xmin, ymax), (xmax, ymax), (xmax, ymin)]
-                    polygon_draw.polygon(points, fill=color)
-                    polygon_draw.text((xmin, ymin - 25), name, fill=color, font=font)
-                else:
-                    color = hash_label_to_color(name)
-                    polygon_draw.rectangle((xmin, ymin, xmax, ymax), outline=color, width=5)
-                    polygon_draw.text((xmin, ymin - 25), name, fill=color, font=font)
-                    
-            # Save image
-            im = Image.alpha_composite(im, polygon_layer)
-            im.save(os.path.join(output_folder, image_file.replace(".jpg", ".png")), "PNG")
+        for obj in root.iter('object'):
+            name = obj.find('name').text
+            xmin = int(obj.find('bndbox/xmin').text)
+            ymin = int(obj.find('bndbox/ymin').text)
+            xmax = int(obj.find('bndbox/xmax').text)
+            ymax = int(obj.find('bndbox/ymax').text)
+
+            if overlay:
+                color = hash_label_to_color(name)
+                points = [(xmin, ymin), (xmin, ymax), (xmax, ymax), (xmax, ymin)]
+                polygon_draw.polygon(points, fill=color)
+                polygon_draw.text((xmin, ymin - 25), name, fill=color, font=font)
+            else:
+                color = hash_label_to_color(name)
+                polygon_draw.rectangle((xmin, ymin, xmax, ymax), outline=color, width=5)
+                polygon_draw.text((xmin, ymin - 25), name, fill=color, font=font)
+
+        # Save image
+        im = Image.alpha_composite(im, polygon_layer)
+        output_path = os.path.join(output_folder, os.path.basename(image_file).replace(".jpg", ".png"))
+        if os.access(output_folder, os.W_OK):
+            im.save(output_path, "PNG")
             count += 1
+            print(f'{int(count / (time.time() - start_time))} frames saved per second', end="\r")
+        else:
+            pass
 
-    if time.time() - start_time >= 1:
-        print(f"Saved {count} images in the last second")
-        start_time = time.time()
-        count = 0
-
-# Print the final count of images saved
-print(f"Saved {count} images in total.")
+with concurrent.futures.ThreadPoolExecutor() as executor:
+    image_files = [os.path.join(images_folder, file) for file in os.listdir(images_folder) if file.endswith('.jpg') or file.endswith('.png')]
+    results = [executor.submit(process_image, image_file) for image_file in image_files]
 
 
