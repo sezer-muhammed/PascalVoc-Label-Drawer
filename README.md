@@ -22,7 +22,7 @@ python label_images.py --images_folder path/to/images --annotations_folder path/
 - Implementing more advanced image processing techniques to improve the visualization of labels
 - Incorporating more options for label styling (e.g. label background, border, etc.)
 - Incorporating support for video data
-- Improving performance by implementing parallel processing
+- Improving performance by implementing parallel processing. Done!
 
 # Contribution
 
