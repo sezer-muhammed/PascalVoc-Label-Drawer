@@ -29,8 +29,6 @@ font_size = args.font_size
 if not os.path.exists(output_folder):
     os.makedirs(output_folder)
 
-color_dict = {'tasit': (255, 110, 0, 40), 'insan': (0, 255, 110, 40), 'object3': (0, 0, 255, 40)}
-
 start_time = time.time()
 count = 0
 
