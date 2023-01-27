@@ -1,6 +1,6 @@
 import os
 import xml.etree.ElementTree as ET
-from PIL import Image, ImageDraw, ImageFont
+import cv2
 import argparse
 import time
 import hashlib
@@ -10,7 +10,7 @@ def hash_label_to_color(label_name):
     """ Hash the label name to a unique color """
     label_name = label_name.encode()
     color = hashlib.sha1(label_name).hexdigest()[:6]
-    color = tuple(int(color[i:i+2], 16) for i in (0, 2 ,4)) + (60,)
+    color = tuple(int(color[i:i+2], 16) for i in (0, 2 ,4))
     return color
 
 parser = argparse.ArgumentParser(description='Draw labels on images and save them')
@@ -34,7 +34,7 @@ start_time = time.time()
 count = 0
 
 # Pre-allocate the image and draw objects
-font = ImageFont.truetype("arial.ttf", font_size)
+font = cv2.FONT_HERSHEY_COMPLEX
 
 def process_image(image_file):
     """ Process a single image """
@@ -43,14 +43,13 @@ def process_image(image_file):
 
     annotation_file = os.path.splitext(image_file)[0] + '.xml'
     annotation_path = os.path.join(annotations_folder, annotation_file)
+
     if os.path.exists(annotation_path):
         # Open image
-        im = Image.open(os.path.join(images_folder, image_file))
-        im = im.convert("RGBA")
+        im = cv2.imread(os.path.join(images_folder, image_file))
 
         # Clear the previous image from the polygon layer
-        polygon_layer = Image.new('RGBA', im.size, (0, 0, 0, 0))
-        polygon_draw = ImageDraw.Draw(polygon_layer)
+        polygon_draw = im.copy()
 
         # Open annotation
         tree = ET.parse(annotation_path)
@@ -63,21 +62,22 @@ def process_image(image_file):
             xmax = int(obj.find('bndbox/xmax').text)
             ymax = int(obj.find('bndbox/ymax').text)
 
+            points = ((xmin, ymin), (xmax, ymax))
+
             if overlay:
                 color = hash_label_to_color(name)
-                points = [(xmin, ymin), (xmin, ymax), (xmax, ymax), (xmax, ymin)]
-                polygon_draw.polygon(points, fill=color)
-                polygon_draw.text((xmin, ymin - 25), name, fill=color, font=font)
+                cv2.rectangle(polygon_draw, points[0], points[1], color, -1)
+                cv2.putText(polygon_draw, name, points[0], font, 1, color, 1)
             else:
                 color = hash_label_to_color(name)
-                polygon_draw.rectangle((xmin, ymin, xmax, ymax), outline=color, width=5)
-                polygon_draw.text((xmin, ymin - 25), name, fill=color, font=font)
-
+                h, w, c = polygon_draw.shape
+                cv2.rectangle(polygon_draw, points[0], points[1], color, int(w / 600))
+                cv2.putText(polygon_draw, name, points[0], font, 1, color, int(w / 1200))
         # Save image
-        im = Image.alpha_composite(im, polygon_layer)
+        im = cv2.addWeighted(im, 0.5, polygon_draw, 0.5, 1)
         output_path = os.path.join(output_folder, os.path.basename(image_file).replace(".jpg", ".png"))
         if os.access(output_folder, os.W_OK):
-            im.save(output_path, "PNG")
+            cv2.imwrite(output_path, im)
             count += 1
             print(f'{int(count / (time.time() - start_time))} frames saved per second', end="\r")
         else:
